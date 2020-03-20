@@ -1,6 +1,6 @@
 # BigDataStockPriceAndEarnings Project
 
-The purpose of this project is to collect data used to a big data analysis in CouchDB.
+The purpose of this project is to collect data used to do a big data analysis in CouchDB.
 
 The data sources used are the RapidAPI Yahoo Finance API and the SEC EDGAR system. The goal is to be able to analyze in CouchDB whether quarterly earnings reports have an effect on the price of the stock.
 
