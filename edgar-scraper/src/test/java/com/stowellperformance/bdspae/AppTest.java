@@ -1,12 +1,17 @@
 package com.stowellperformance.bdspae;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
 
 import org.apache.http.StatusLine;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -23,6 +28,8 @@ import com.squareup.okhttp.Response;
 import com.squareup.okhttp.ResponseBody;
 import com.stowellperformance.bdspae.HistoryDownload;
 import com.stowellperformance.bdspae.domain.DataPoint;
+import com.stowellperformance.bdspae.domain.DateRange;
+import com.stowellperformance.bdspae.domain.Report10Q;
 import com.stowellperformance.bdspae.toolkit.Props;
 import com.stowellperformance.bdspae.tools.ResourceGrabber;
 
@@ -278,4 +285,71 @@ public class AppTest
 		}
     }
     
+    public void testGetEarningsPerShare1() {
+    	File f = new File(ReportDownload.reportFilingLocation + File.separator + "98677_2018-11-09.xml");
+    	Report10Q r = new Report10Q(f);
+		Float eps = r.getEps();
+		System.out.println(f.getName()+": "+eps);
+    }
+    
+    public void testGetEarningsPerShare2() {
+    	File f = new File(ReportDownload.reportFilingLocation + File.separator + "872912_2011-11-09.xml");
+    	Report10Q r = new Report10Q(f);
+		Float eps = r.getEps();
+		System.out.println(f.getName()+": "+eps);
+    }
+    
+    //1001039_2010-02-09.xml
+    public void testGetEarningsPerShare3() {
+    	File f = new File(ReportDownload.reportFilingLocation + File.separator + "1001039_2010-02-09.xml");
+    	Report10Q r = new Report10Q(f);
+		Float eps = r.getEps();
+		System.out.println(f.getName()+": "+eps);
+    }
+    
+    //1089063_2011-11-23.xml
+    public void testGetEarningsPerShare4() {
+    	File f = new File(ReportDownload.reportFilingLocation + File.separator + "1089063_2011-11-23.xml");
+    	Report10Q r = new Report10Q(f);
+		Float eps = r.getEps();
+		System.out.println(f.getName()+": "+eps);
+    }        
+    
+    public void testGetEarnings() {
+    	List<Integer> cikNos = ReportDownload.getRelevantCikNos();
+    	ArrayList<Report10Q> reportsICareAbout = ReportDownload.getRelevantEarningsReports(cikNos);
+    	for(Report10Q r : reportsICareAbout) {
+    		Float eps = r.getEps();
+    		System.out.println(eps);
+    	}
+    }
+    
+    public void testDateRange() {
+    	SimpleDateFormat dateformat = new SimpleDateFormat("MM-dd-yyyy");
+    	String strdate1 = "02-04-2013";
+    	String strdate2 = "02-08-2013";
+
+    	try {
+			Date date1 = dateformat.parse(strdate1);
+			Date date2 = dateformat.parse(strdate2);
+			DateRange dr = new DateRange(date1, date2);
+			long dayCount = dr.dayCount();
+			assertEquals((long)4, dayCount);
+		} catch (ParseException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+    }
+    
+    public void testSaveReport() {
+    	File f = new File(ReportDownload.reportFilingLocation + File.separator + "1089063_2011-11-23.xml");
+    	Report10Q r = new Report10Q(f);
+    	assertNotNull(r);
+    	System.out.println(r.toString());
+    }
+    
+    public void testProblemReport() {
+    	File f = new File(ReportDownload.reportFilingLocation + File.separator + "1100270_2014-09-12.xml");
+    	Report10Q r = new Report10Q(f);
+    }
 }

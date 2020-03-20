@@ -5,21 +5,31 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.net.URL;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.List;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.stream.Collectors;
+
 import org.apache.commons.io.FileUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+import com.stowellperformance.bdspae.domain.DateRange;
 import com.stowellperformance.bdspae.domain.Filing;
+import com.stowellperformance.bdspae.domain.Report10Q;
 
 public class ReportDownload 
 {
 	private static String formIndexUrl = "https://www.sec.gov/Archives/edgar/full-index/year/QTRquarter/form.idx";
 	private static String secDotGovPrefix = "https://www.sec.gov";
-	private static String indexFilingLocation = "."+File.separator+"IndexFiles";
-	private static String instanceFilingLocation = "."+File.separator+"EarningsReports";
+	static String indexFilingLocation = "."+File.separator+"IndexFiles";
+	static String reportFilingLocation = "."+File.separator+"EarningsReports";
 	private static ArrayList<File> formIndices = new ArrayList<File>();
 	private static ArrayList<Filing> _10qFilings = new ArrayList<Filing>();
 	private static int DESC = 1;
@@ -28,20 +38,13 @@ public class ReportDownload
 	private static int SIZE = 4;
 	
 	public static void main(String[] args) {
-		downloadFormIndices(); //1993 q-1 to 2020 q-1
-		System.out.println("Got Indices. Getting Filings. Please Wait...");
-		get10qFilings();
-		System.out.println("There are this many 10-q filings: "+_10qFilings.size()+". Grabbing instance files. Please Wait...");
-		grabInstanceFiles();
-		System.out.println("Done.");
-		
 		/*
-		//https://www.sec.gov/Archives/edgar/data/18366/0000018366-94-000007-index.html
-		grabInstanceFile(new Filing("10-Q        CBS INC                                                       18366       1994-05-02  edgar/data/18366/0000018366-94-000007.txt           "));
-		
-		//https://www.sec.gov/Archives/edgar/data/66740/0001558370-19-006397-index.html
-		grabInstanceFile(new Filing("10-Q        3M CO                                                         66740       2019-07-26  edgar/data/66740/0001558370-19-006397.txt           "));	
+		downloadFormIndices();
+		get10qFilings();
+		grabInstanceFiles();
 		*/
+		
+		downloadAllAndSaveToCouchDB();
 	}
 	
 	public static void grabInstanceFiles() {
@@ -59,7 +62,7 @@ public class ReportDownload
 	}
 	
 	/*
-	 * Grab the lines pertaining the 10Q from the index file
+	 * Grab the lines pertaining to the 10Q forms from the index file.
 	 */
 	public static ArrayList<Filing> get10qFilings(){
 		FileReader fileReader = null;
@@ -102,7 +105,7 @@ public class ReportDownload
 	}
 
 	/*
-	 * Loop through 4 quarters for each year since 1993 and download the form index
+	 * Loop through 4 quarters for each year since 1993 and download the index forms.
 	 */
 	public static void downloadFormIndices() {
 		formIndices.clear();
@@ -139,6 +142,11 @@ public class ReportDownload
 		return result;
 	}
 	
+	/**
+	 * Gets the actual filing
+	 * @param f
+	 * @return
+	 */
 	public static File grabInstanceFile(Filing f) {
 		//f = new Filing("10-Q        3M CO                                                         66740       2019-07-26  edgar/data/66740/0001558370-19-006397.txt           ");
 		File result = null;		
@@ -163,7 +171,7 @@ public class ReportDownload
 				try {
 					String tokens[] = reportUrl.split("\\.");
 					String extension = tokens[tokens.length - 1];
-					result = new File(instanceFilingLocation + File.separator + f.getCikNumber()+"_"+f.getDateString()+"."+extension);
+					result = new File(reportFilingLocation + File.separator + f.getCikNumber()+"_"+f.getDateString()+"."+extension);
 					if(!result.exists()) { 
 						FileUtils.copyURLToFile(new URL(reportUrl), result);
 					}
@@ -180,6 +188,11 @@ public class ReportDownload
 		return result;
 	}
 	
+	/**
+	 * Picks out the correct file from the document table
+	 * @param table
+	 * @return
+	 */
 	public static String grabInstanceFileUrlFromDocumentTable(Elements table) {
 		//first try getting the file from row where type = "10-Q"
 		//else try getting the file from the row where type = "EX-101.INS"
@@ -240,6 +253,11 @@ public class ReportDownload
 		return result;
 	}
 	
+	/**
+	 * Picks out the correct file from the data file table
+	 * @param table
+	 * @return
+	 */
 	public static String grabInstanceFileUrlFromDataFileTable(Elements table) {
 		String result = null;
 		int rowIndex = 0;
@@ -284,5 +302,63 @@ public class ReportDownload
 		}
 		
 		return result;
+	}
+	
+	/**
+	 * Gets the cik numbers of the companies we care about from src/main/resources/cik_ticker.csv
+	 * @return
+	 */
+	public static List getRelevantCikNos(){
+		List<Integer> result = CompanyDownload.getCompanies().stream()
+									  .map(c->Integer.parseInt(c.getCik()))
+									  .collect(Collectors.toList());
+		
+		return result;
+	}
+	
+	/**
+	 * Call this method AFTER the earnings reports have been downloaded. 
+	 * This will get the set of reports for the companies we find relevant as set by src/main/resources/cik_ticker.csv
+	 * @param cikNumbers
+	 * @return
+	 */
+	public static ArrayList<Report10Q> getRelevantEarningsReports(List<Integer> relevantCiks){
+		ArrayList<Report10Q> result = new ArrayList<Report10Q>();		
+		File reportFolder = new File(reportFilingLocation);
+		
+		List<String> fileNames= Arrays.asList(reportFolder.list());
+		for(String filename : fileNames) {
+			if(filename.endsWith("xml")) {
+				
+				String[] tokens = filename.split("_");
+				int cik = Integer.parseInt(tokens[0]);
+				if(relevantCiks.contains(cik)) {
+					String path = reportFilingLocation + File.separator + filename;
+					System.out.println(path);
+					File reportFile = new File(path);
+					System.out.println("Building report from: "+reportFile.getName());
+					if(reportFile.getName().equals("1100270_2014-09-12.xml")) {
+						int i = 0;
+					}
+					try {
+						result.add(new Report10Q(reportFile));
+					}catch(Exception e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		}
+		System.out.println("Got "+result.size()+" reports.");
+		
+		return result;
+	}
+	
+	public static void downloadAllAndSaveToCouchDB() {
+		List<Integer> cikNos = ReportDownload.getRelevantCikNos();
+    	ArrayList<Report10Q> reportsICareAbout = ReportDownload.getRelevantEarningsReports(cikNos);
+    	for(Report10Q r : reportsICareAbout) {
+    		System.out.println(r.toString());
+    		r.saveToDB();
+    	}
 	}
 }

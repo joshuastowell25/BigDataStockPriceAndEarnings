@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.util.ArrayList;
 
 import org.apache.http.StatusLine;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -16,16 +17,25 @@ import org.apache.http.message.BasicHeader;
 import org.apache.http.protocol.HTTP;
 import org.json.JSONObject;
 
+import com.stowellperformance.bdspae.domain.Company;
 import com.stowellperformance.bdspae.toolkit.Props;
 import com.stowellperformance.bdspae.tools.ResourceGrabber;
 
 public class CompanyDownload {
 
 	public static void main(String[] args) {
-		parseAndUploadCompanyData();
+		ArrayList<Company> companies = getCompanies();
+		postCompaniesToCouchDB(companies);
+		downloadCompanyHistoricalData(companies);
 	}
 	
-	public static void parseAndUploadCompanyData() {
+	/**
+	 * Gets the companies from the src/main/resources/cik_ticker.csv file
+	 * @return
+	 */
+	public static ArrayList<Company> getCompanies() {
+		ArrayList<Company> companies = new ArrayList();
+		
 		ResourceGrabber r1 = new ResourceGrabber();
     	InputStream ir1 = r1.getResource("cik_ticker.csv");
     	InputStreamReader isr1 = new InputStreamReader(ir1);
@@ -62,11 +72,9 @@ public class CompanyDownload {
 					business = tokens[5];
 					incorporated = tokens[6];
 					irs = tokens[7];
-					//postCompanyToCouchDB(cik, ticker, name, exchange, sic, business, incorporated, irs);
-					if(!ticker.equals(null) && !ticker.equals("")) {
-						System.out.println(index+". Gathering data for "+ticker);
-						HistoryDownload.getAndSaveData(ticker);
-					}
+					
+					Company c = new Company(cik, ticker, name, exchange, sic, business, incorporated, irs);
+					companies.add(c);
 				} catch (Exception e) {
 					e.printStackTrace();
 					System.out.println(line);
@@ -77,28 +85,58 @@ public class CompanyDownload {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		
+		return companies;
+	}
+	
+	/**
+	 * POSTs the given companies from the src/main/resources/cik_ticker.csv file into CouchDB
+	 */
+	public static void postCompaniesToCouchDB(ArrayList<Company> companies) {
+		for(Company c : companies) {
+			postCompanyToCouchDB(c);
+		}
+	}
+	
+	/**
+	 * Downloads the Max limit of daily historical data for the given companies
+	 */
+	public static void downloadCompanyHistoricalData(ArrayList<Company> companies) {
+		int count = 0;
+		
+		for(Company c : companies) {
+			if(!c.getTicker().equals(null) && !c.getTicker().equals("")) {
+				System.out.println((count++)+". Gathering data for "+c.getTicker());
+				HistoryDownload.getAndSaveData(c.getTicker());
+			}
+			postCompanyToCouchDB(c);
+		}
 	}
 
-	public static void postCompanyToCouchDB(String cik, String ticker, String name, String exchange, String sic, String business, String incorporated, String irs) {
+	/**
+	 * POSTs a Company object to the company database in the CouchDB pointed at by src/main/resources/credentials.properties
+	 * @param c The company object to POST
+	 */
+	public static void postCompanyToCouchDB(Company c) {
 		
 		HttpPut request;
 		try {
 	        DefaultHttpClient httpClient = new DefaultHttpClient();
-	        //http://user:pw@address:port/database
-			request = new HttpPut(new URI(Props.getProperty("credentials.properties", "db.url")+"/company/"+cik));
+	        //db.url format: http://user:pw@address:port/database
+			request = new HttpPut(new URI(Props.getProperty("credentials.properties", "db.url")+"/company/"+c.getCik()));
 	        StringEntity stringEntity = null;
 	        String jsonString = null;
 	        try {
 	        	JSONObject j = new JSONObject();
-	        	j.put("_id", cik);
-	        	j.put("cik", cik);
-	        	j.put("ticker", ticker);
-	        	j.put("name", name);
-	        	j.put("exchange", exchange);
-	        	j.put("sic", sic);
-	        	j.put("business", business);
-	        	j.put("incorporated", incorporated);
-	        	j.put("irs", irs);
+	        	j.put("_id", c.getCik());
+	        	j.put("cik", c.getCik());
+	        	j.put("ticker", c.getTicker());
+	        	j.put("name", c.getName());
+	        	j.put("exchange", c.getExchange());
+	        	j.put("sic", c.getSic());
+	        	j.put("business", c.getBusiness());
+	        	j.put("incorporated", c.getIncorporated());
+	        	j.put("irs", c.getIrs());
 	        	jsonString = j.toString();
 	            stringEntity = new StringEntity(jsonString);
 	        } catch (UnsupportedEncodingException e) {

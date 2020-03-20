@@ -26,6 +26,7 @@ public class DataPoint {
 		Date date = new Date(Long.parseLong(epochSeconds)*1000);
 		dateStringFormat.setTimeZone(TimeZone.getTimeZone(timezone));
 		this.dateString = dateStringFormat.format(date);
+		
 		try {
 			this.open = Double.parseDouble(open);
 		}catch(Exception e) {
